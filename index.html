@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Desafio dos 5 Cadeados</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --accent:#08a0ff;
+      --ok:#22c55e;
+      --wrong:#ef4444;
+      --glass: rgba(255,255,255,0.04);
+      font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      background:linear-gradient(180deg,#071126 0%, #071a2a 100%);
+      color:#e6eef8;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+    .container{
+      width:100%;
+      max-width:920px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.03));
+      border-radius:12px;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+      padding:28px;
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    h1{ margin:0 0 10px 0; font-size:20px; }
+    p.lead{ margin:0 0 20px 0; color: #a9c7df; }
+
+    .locks{
+      display:grid;
+      grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+      gap:16px;
+      margin-bottom:20px;
+    }
+
+    .lock{
+      background:var(--card);
+      padding:14px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.03);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      align-items:stretch;
+    }
+
+    .lock-header{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .icon{
+      font-size:28px;
+      width:44px;
+      height:44px;
+      border-radius:8px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:var(--glass);
+    }
+    .lock-title{ font-weight:600; }
+    .status{ font-size:13px; color:#9fb9d8; }
+
+    input[type="text"]{
+      width:100%;
+      padding:8px 10px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      color:inherit;
+      outline:none;
+      box-sizing:border-box;
+    }
+    button{
+      padding:8px 12px;
+      border-radius:8px;
+      border: none;
+      background:var(--accent);
+      color:#012033;
+      font-weight:600;
+      cursor:pointer;
+    }
+    button[disabled]{
+      opacity:0.45;
+      cursor:not-allowed;
+    }
+
+    .message{
+      margin-top:14px;
+      font-size:15px;
+      padding:12px;
+      border-radius:8px;
+      display:none;
+    }
+    .message.ok{ background: rgba(34,197,94,0.12); color:var(--ok); display:block; border:1px solid rgba(34,197,94,0.12); }
+    .message.wrong{ background: rgba(239,68,68,0.08); color:var(--wrong); display:block; border:1px solid rgba(239,68,68,0.06); }
+
+    .final{
+      margin-top:18px;
+      padding:16px;
+      border-radius:10px;
+      background: linear-gradient(90deg, rgba(8,160,255,0.08), rgba(34,197,94,0.06));
+      display:none;
+      align-items:center;
+      gap:12px;
+    }
+    .final.show{ display:flex; justify-content:space-between; }
+
+    footer{
+      margin-top:14px;
+      font-size:13px;
+      color:#93b7d5;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    @media (max-width:520px){
+      .locks{ grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" role="main">
+    <h1>Desafio dos 5 Cadeados</h1>
+    <p class="lead">Destrave os 5 cadeados na ordem correta. Se errar, tente novamente — mas só será possível avançar quando cada cadeado for aberto na sequência.</p>
+
+    <div class="locks" id="locksContainer">
+      <!-- Locks serão geradas pelo JS -->
+    </div>
+
+    <div class="final" id="finalBox" aria-live="polite">
+      <div>
+        <strong>Parabéns — você abriu todos os cadeados!</strong>
+        <div style="font-size:13px;color:#cfe8ff;margin-top:6px;">Você completou o desafio.</div>
+      </div>
+      <div style="font-size:22px;">🏆</div>
+    </div>
+
+    <footer>
+      <div>Feito com ❤️ — Desafio de cadeados</div>
+      <div style="opacity:0.8">Host: GitHub Pages (repositório)</div>
+    </footer>
+  </div>
+
+  <script>
+    // SENHAS definidas conforme pedido (guardadas no front-end - ok para este desafio)
+    const rawPasswords = [
+      "1953",
+      "HongKong",
+      "HTCS",
+      "Taipei",
+      "Tigres Asiáticos"
+    ];
+
+    // Normalização para comparação: remove acentos, converte para maiúsculas, colapsa espaços
+    function normalizeForCompare(s){
+      if(s === null || s === undefined) return "";
+      s = String(s).trim();
+      // remover acentos
+      s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      // normalizar espaços e maiúsculas
+      s = s.replace(/\s+/g, " ").toUpperCase();
+      return s;
+    }
+
+    const passwords = rawPasswords.map(p => normalizeForCompare(p));
+
+    const container = document.getElementById('locksContainer');
+
+    // Estado dos cadeados
+    const state = {
+      unlocked: [false, false, false, false, false]
+    };
+
+    function createLockCard(index){
+      const wrapper = document.createElement('div');
+      wrapper.className = 'lock';
+      wrapper.id = 'lock-' + index;
+
+      const header = document.createElement('div');
+      header.className = 'lock-header';
+      const icon = document.createElement('div');
+      icon.className = 'icon';
+      icon.id = `icon-${index}`;
+      icon.textContent = '🔒';
+
+      const titleBox = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'lock-title';
+      title.textContent = `Cadeado ${index + 1}`;
+      const status = document.createElement('div');
+      status.className = 'status';
+      status.id = `status-${index}`;
+      status.textContent = index === 0 ? 'Disponível' : 'Bloqueado';
+
+      titleBox.appendChild(title);
+      titleBox.appendChild(status);
+      header.appendChild(icon);
+      header.appendChild(titleBox);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Insira a senha';
+      input.id = `input-${index}`;
+      input.autocomplete = 'off';
+      input.disabled = index !== 0;
+      input.addEventListener('keypress', (e)=>{
+        if(e.key === 'Enter') attemptUnlock(index);
+      });
+
+      const btn = document.createElement('button');
+      btn.textContent = 'Destravar';
+      btn.id = `btn-${index}`;
+      btn.disabled = index !== 0;
+      btn.addEventListener('click', ()=> attemptUnlock(index));
+
+      const msgOk = document.createElement('div');
+      msgOk.className = 'message ok';
+      msgOk.id = `ok-${index}`;
+      msgOk.style.display = 'none';
+      msgOk.textContent = 'Senha correta! Cadeado destravado.';
+
+      const msgWrong = document.createElement('div');
+      msgWrong.className = 'message wrong';
+      msgWrong.id = `wrong-${index}`;
+      msgWrong.style.display = 'none';
+      msgWrong.textContent = 'Senha incorreta. Tente novamente.';
+
+      wrapper.appendChild(header);
+      wrapper.appendChild(input);
+      wrapper.appendChild(btn);
+      wrapper.appendChild(msgOk);
+      wrapper.appendChild(msgWrong);
+
+      return wrapper;
+    }
+
+    // Render dos 5 cadeados
+    for(let i=0;i<5;i++){
+      container.appendChild(createLockCard(i));
+    }
+
+    function setUnlockedVisual(i){
+      document.getElementById(`icon-${i}`).textContent = '🔓';
+      document.getElementById(`status-${i}`).textContent = 'Destravado';
+      document.getElementById(`input-${i}`).disabled = true;
+      document.getElementById(`btn-${i}`).disabled = true;
+      document.getElementById(`ok-${i}`).style.display = 'block';
+      document.getElementById(`wrong-${i}`).style.display = 'none';
+    }
+
+    function enableNext(i){
+      const next = i + 1;
+      if(next < 5){
+        document.getElementById(`input-${next}`).disabled = false;
+        document.getElementById(`btn-${next}`).disabled = false;
+        document.getElementById(`status-${next}`).textContent = 'Disponível';
+        // foco no próximo input para boa UX
+        setTimeout(()=> document.getElementById(`input-${next}`).focus(), 120);
+      } else {
+        // final: mostrar mensagem de vitória
+        document.getElementById('finalBox').classList.add('show');
+      }
+    }
+
+    function attemptUnlock(i){
+      const userInputRaw = document.getElementById(`input-${i}`).value;
+      const normalized = normalizeForCompare(userInputRaw);
+
+      // Somente permitir tentativa se for o cadeado atual (o primeiro não destravado)
+      const firstLockedIndex = state.unlocked.indexOf(false);
+      if(firstLockedIndex !== i){
+        // não é o turno do usuário: ignora
+        // Atualiza mensagem de status para reforçar ordem
+        document.getElementById(`wrong-${i}`).textContent = 'Você precisa destravar os cadeados anteriores primeiro.';
+        document.getElementById(`wrong-${i}`).style.display = 'block';
+        document.getElementById(`ok-${i}`).style.display = 'none';
+        return;
+      }
+
+      if(normalized === passwords[i]){
+        // correto
+        state.unlocked[i] = true;
+        setUnlockedVisual(i);
+        enableNext(i);
+      } else {
+        // incorreto
+        document.getElementById(`wrong-${i}`).textContent = 'Senha incorreta. Tente novamente.';
+        document.getElementById(`wrong-${i}`).style.display = 'block';
+        document.getElementById(`ok-${i}`).style.display = 'none';
+        // limpa campo para nova tentativa e foca
+        setTimeout(()=> {
+          const el = document.getElementById(`input-${i}`);
+          el.value = '';
+          el.focus();
+        }, 180);
+      }
+    }
+
+    // foco inicial
+    document.getElementById('input-0').focus();
+
+    // AJUDA: Atalho para reiniciar (shift + r)
+    document.addEventListener('keydown', (e)=>{
+      if(e.shiftKey && (e.key === 'R' || e.key === 'r')){
+        if(confirm('Reiniciar o desafio?')){
+          // resetar estado e UI
+          for(let i=0;i<5;i++){
+            state.unlocked[i] = false;
+            document.getElementById(`icon-${i}`).textContent = '🔒';
+            document.getElementById(`status-${i}`).textContent = i === 0 ? 'Disponível' : 'Bloqueado';
+            const input = document.getElementById(`input-${i}`);
+            input.disabled = i !== 0;
+            input.value = '';
+            document.getElementById(`btn-${i}`).disabled = i !== 0;
+            document.getElementById(`ok-${i}`).style.display = 'none';
+            document.getElementById(`wrong-${i}`).style.display = 'none';
+          }
+          document.getElementById('finalBox').classList.remove('show');
+          document.getElementById('input-0').focus();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
